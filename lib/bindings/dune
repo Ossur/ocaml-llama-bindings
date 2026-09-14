@@ -1,0 +1,35 @@
+(library
+ (name llama_bindings)
+ (flags
+  (:standard -w -9-27))
+ (ctypes
+  (external_library_name llama)
+  (deps
+   (source_tree ../../vendor/install))
+  (build_flags_resolver
+   (vendored
+    (c_flags
+     (:standard -I../../vendor/install/include))
+    (c_library_flags
+     (:standard
+      -L../../vendor/install/lib
+      -lllama
+      -lggml
+      -lggml-cpu
+      -lggml-base
+      -lstdc++
+      -lm
+      -lpthread
+      -ldl
+      -fopenmp))))
+  (headers
+   (include "llama.h"))
+  (type_description
+   (instance Types)
+   (functor Type_description))
+  (function_description
+   (concurrency unlocked)
+   (instance Functions)
+   (functor Function_description))
+  (generated_types Types_generated)
+  (generated_entry_point C)))
