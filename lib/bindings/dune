@@ -1,3 +1,39 @@
+; The vendored llama.cpp install prefix has to be named by an absolute path.
+; Dune runs the ctypes C compile steps with cwd = this directory's build dir,
+; but the archive/link steps (ocamlmklib, ocamlc -a, -cclib) with cwd = the build
+; context root, so no single relative -I/-L string is correct for both. Relative
+; paths only appear to work in a standalone checkout because `_build/default`
+; happens to be exactly as deep as `lib/bindings`; as a submodule inside a parent
+; dune workspace the link steps fail with `cannot find -lllama`. %{project_root}
+; is no help either -- it expands relative to this stanza's directory, i.e. to
+; the same `../..`.
+;
+; $(pwd) below is this stanza's own directory under _build, so the flags point at
+; the `source_tree` copy of vendor/install and compile and link agree no matter
+; which cwd dune runs them from. (These absolute _build paths are baked into
+; llama_bindings.cmxa, which is what we want for a vendored submodule but would
+; not be relocatable if this library were ever installed through opam.)
+;
+; (universe) makes the rule re-run on every build so the baked path follows the
+; checkout if it is moved or renamed -- dune's digest cannot see that $(pwd)
+; changed, so without it a stale path survives in _build until a `dune clean`.
+; The cost is two printf calls: the sexp contents are unchanged in the normal
+; case, so nothing downstream rebuilds.
+(rule
+ (targets c_flags.sexp c_library_flags.sexp)
+ (deps
+  (universe)
+  (sandbox none)
+  (source_tree ../../vendor/install))
+ (action
+  (progn
+   (with-stdout-to
+    c_flags.sexp
+    (system "printf '(\"-I%s\")\\n' \"$(pwd)/../../vendor/install/include\""))
+   (with-stdout-to
+    c_library_flags.sexp
+    (system "printf '(\"-L%s\")\\n' \"$(pwd)/../../vendor/install/lib\"")))))
+
 (library
  (name llama_bindings)
  (flags
@@ -9,10 +45,11 @@
   (build_flags_resolver
    (vendored
     (c_flags
-     (:standard -I../../vendor/install/include))
+     (:standard
+      (:include c_flags.sexp)))
     (c_library_flags
      (:standard
-      -L../../vendor/install/lib
+      (:include c_library_flags.sexp)
       -lllama
       -lggml
       -lggml-cpu
